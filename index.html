@@ -24,12 +24,12 @@ body {
   height: 100vh;
 }
 
-/* aumentar contraste del mapa */
+/* mejorar contraste del mapa */
 #map canvas {
   filter: contrast(1.15) brightness(0.95);
 }
 
-/* estilo del marcador */
+/* marcador */
 .marker {
   width: 20px;
   height: 20px;
@@ -106,24 +106,74 @@ if (percent <= 50) {
 function parseCSV(text) {
 
 const lines = text.trim().split('\n');
-
 const separator = lines[0].includes(';') ? ';' : ',';
-
 const headers = lines.shift().split(separator);
 
 return lines.map(line => {
 
   const values = line.split(separator);
-
   const obj = {};
 
   headers.forEach((h, i) => {
-
     obj[h.trim()] = values[i]?.trim();
-
   });
 
   return obj;
+
+});
+
+}
+
+/* distancia simple */
+function distance(a, b) {
+
+const dx = a.lng - b.lng;
+const dy = a.lat - b.lat;
+
+return Math.sqrt(dx * dx + dy * dy);
+
+}
+
+/* separar puntos cercanos */
+function spreadPoints(points, threshold = 0.0003, radius = 0.0002) {
+
+const groups = [];
+
+points.forEach(p => {
+
+  let group = groups.find(g =>
+    distance({lng: p.lng, lat: p.lat}, g.center) < threshold
+  );
+
+  if (!group) {
+
+    group = {
+      center: { lng: p.lng, lat: p.lat },
+      points: []
+    };
+
+    groups.push(group);
+
+  }
+
+  group.points.push(p);
+
+});
+
+groups.forEach(group => {
+
+  if (group.points.length === 1) return;
+
+  const step = (Math.PI * 2) / group.points.length;
+
+  group.points.forEach((p, i) => {
+
+    const angle = step * i;
+
+    p.lng += Math.cos(angle) * radius;
+    p.lat += Math.sin(angle) * radius;
+
+  });
 
 });
 
@@ -142,7 +192,7 @@ zoom: 13
 
 });
 
-/* MEJORAR NOMBRES Y CALLES */
+/* mejorar nombres y calles */
 map.on('load', () => {
 
 const layers = map.getStyle().layers;
@@ -154,7 +204,6 @@ layers.forEach(layer => {
     if (layer.layout && layer.layout["text-field"]) {
 
       map.setPaintProperty(layer.id, "text-halo-color", "#ffffff");
-
       map.setPaintProperty(layer.id, "text-halo-width", 1.5);
 
     }
@@ -171,34 +220,35 @@ layers.forEach(layer => {
 
 });
 
-/* CARGAR DATOS DESDE GOOGLE SHEETS */
+/* CARGAR DATOS */
 fetch(SHEET_URL)
 
 .then(res => res.text())
 
 .then(csv => {
 
-const data = parseCSV(csv);
+const data = parseCSV(csv).map(p => ({
+  ...p,
+  lat: Number(p.lat),
+  lng: Number(p.lng),
+  percent: Number(p.percent)
+}));
+
+/* separar puntos cercanos */
+spreadPoints(data);
 
 const bounds = new mapboxgl.LngLatBounds();
 
 data.forEach(p => {
 
-  const percent = Number(p.percent);
+  if (isNaN(p.percent) || isNaN(p.lat) || isNaN(p.lng)) return;
 
-  const lat = Number(p.lat);
-
-  const lng = Number(p.lng);
-
-  if (isNaN(percent) || isNaN(lat) || isNaN(lng)) return;
-
-  const color = getGradientColor(percent);
+  const color = getGradientColor(p.percent);
 
   const el = document.createElement('div');
 
   el.className = 'marker';
-
-  el.textContent = percent + '%';
+  el.textContent = p.percent + '%';
 
   el.style.backgroundColor = color;
 
@@ -210,36 +260,29 @@ data.forEach(p => {
 
   new mapboxgl.Marker(el)
 
-    .setLngLat([lng, lat])
+    .setLngLat([p.lng, p.lat])
 
     .setPopup(
-
       new mapboxgl.Popup({ offset: 25 }).setHTML(
-        `<h3>${p.name}</h3><b>${percent}%</b>`
+        `<h3>${p.name}</h3><b>${p.percent}%</b>`
       )
-
     )
 
     .addTo(map);
 
-  bounds.extend([lng, lat]);
+  bounds.extend([p.lng, p.lat]);
 
 });
 
 map.fitBounds(bounds, {
-
   padding: 40,
-
   maxZoom: 14
-
 });
 
 })
 
 .catch(err => {
-
 console.error('Error cargando CSV:', err);
-
 });
 
 </script>
