@@ -1,159 +1,248 @@
 <!doctype html>
 <html lang="es">
 <head>
-  <meta charset="utf-8" />
-  <title>Mapa con porcentajes</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta charset="utf-8" />
+<title>Mapa con porcentajes</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
 
-  <!-- Mapbox -->
-  <link
-    href="https://api.mapbox.com/mapbox-gl-js/v3.14.0/mapbox-gl.css"
-    rel="stylesheet"
-  />
-  <script src="https://api.mapbox.com/mapbox-gl-js/v3.14.0/mapbox-gl.js"></script>
+<!-- Mapbox -->
+<link
+href="https://api.mapbox.com/mapbox-gl-js/v3.14.0/mapbox-gl.css"
+rel="stylesheet"
+/>
+<script src="https://api.mapbox.com/mapbox-gl-js/v3.14.0/mapbox-gl.js"></script>
 
-  <style>
-    body {
-      margin: 0;
-      padding: 0;
-    }
+<style>
 
-    #map {
-      width: 100%;
-      height: 100vh;
-    }
+body {
+  margin: 0;
+  padding: 0;
+}
 
-    /* 🔵 FORMATO DEL PUNTO (IGUAL AL ORIGINAL) */
-    .marker {
-      width: 15px;
-      height: 15px;
-      border-radius: 15%;
+#map {
+  width: 100%;
+  height: 100vh;
+}
 
-      display: flex;
-      align-items: center;
-      justify-content: center;
+/* aumentar contraste del mapa */
+#map canvas {
+  filter: contrast(1.15) brightness(0.95);
+}
 
-      font-weight: bold;
-      font-size: 10px;
-      color: #000;
+/* estilo del marcador */
+.marker {
+  width: 20px;
+  height: 20px;
+  border-radius: 20%;
 
-      border: 2px solid black;
-      cursor: pointer;
-      user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 
-      filter: saturate(180%);
-    }
+  font-weight: bold;
+  font-size: 11px;
+  color: #000;
 
-    .mapboxgl-popup-content {
-      text-align: center;
-      font-family: Arial, sans-serif;
-    }
-  </style>
+  border: 2px solid black;
+
+  text-shadow:
+    0 0 2px white,
+    0 0 4px white;
+
+  cursor: pointer;
+  user-select: none;
+
+  filter: saturate(180%) contrast(1.1);
+}
+
+.mapboxgl-popup-content {
+  text-align: center;
+  font-family: Arial, sans-serif;
+}
+
+</style>
 </head>
 
 <body>
-  <div id="map"></div>
 
-  <script>
-    /* 🔑 TOKEN MAPBOX */
-    mapboxgl.accessToken =
-      'pk.eyJ1IjoiZW1vcmVub2QiLCJhIjoiY21sNW9uZjdlMDRwazNkb2FzYXRibHhrbSJ9.Hod4AyKzJZmGdJyEL-7LOg';
+<div id="map"></div>
 
-    /* 📄 URL CSV DE GOOGLE SHEETS (PUBLICADO) */
-    const SHEET_URL =
-      'https://docs.google.com/spreadsheets/d/e/2PACX-1vQUdfpCVAWZcpeZRvZTsFCDK1vt3laquSH5fjirJv9_rAXAF1UDycHyUlbj43ZVPJYTBBFpNCKw_mAz/pub?gid=0&single=true&output=csv';
+<script>
 
-    /* 🎨 COLOR PROGRESIVO (ROJO → AMARILLO → VERDE) */
-    function getGradientColor(percent) {
-      percent = Math.max(0, Math.min(100, percent));
+/* TOKEN MAPBOX */
+mapboxgl.accessToken =
+'pk.eyJ1IjoiZW1vcmVub2QiLCJhIjoiY21sNW9uZjdlMDRwazNkb2FzYXRibHhrbSJ9.Hod4AyKzJZmGdJyEL-7LOg';
 
-      if (percent <= 50) {
-        const ratio = percent / 50;
-        const r = 255;
-        const g = Math.round(50 + 205 * ratio);
-        return `rgb(${r}, ${g}, 0)`;
-      } else {
-        const ratio = (percent - 50) / 50;
-        const r = Math.round(255 * (1 - ratio));
-        const g = 255;
-        return `rgb(${r}, ${g}, 0)`;
-      }
+/* URL GOOGLE SHEETS */
+const SHEET_URL =
+'https://docs.google.com/spreadsheets/d/e/2PACX-1vQUdfpCVAWZcpeZRvZTsFCDK1vt3laquSH5fjirJv9_rAXAF1UDycHyUlbj43ZVPJYTBBFpNCKw_mAz/pub?gid=0&single=true&output=csv';
+
+/* COLOR PROGRESIVO */
+function getGradientColor(percent) {
+
+percent = Math.max(0, Math.min(100, percent));
+
+if (percent <= 50) {
+
+  const ratio = percent / 50;
+  const r = 255;
+  const g = Math.round(50 + 205 * ratio);
+
+  return `rgb(${r}, ${g}, 0)`;
+
+} else {
+
+  const ratio = (percent - 50) / 50;
+  const r = Math.round(255 * (1 - ratio));
+  const g = 255;
+
+  return `rgb(${r}, ${g}, 0)`;
+
+}
+
+}
+
+/* PARSE CSV */
+function parseCSV(text) {
+
+const lines = text.trim().split('\n');
+
+const separator = lines[0].includes(';') ? ';' : ',';
+
+const headers = lines.shift().split(separator);
+
+return lines.map(line => {
+
+  const values = line.split(separator);
+
+  const obj = {};
+
+  headers.forEach((h, i) => {
+
+    obj[h.trim()] = values[i]?.trim();
+
+  });
+
+  return obj;
+
+});
+
+}
+
+/* CREAR MAPA */
+const map = new mapboxgl.Map({
+
+container: 'map',
+
+style: 'mapbox://styles/mapbox/light-v11',
+
+center: [-70.64, -33.45],
+
+zoom: 13
+
+});
+
+/* MEJORAR NOMBRES Y CALLES */
+map.on('load', () => {
+
+const layers = map.getStyle().layers;
+
+layers.forEach(layer => {
+
+  if (layer.type === "symbol") {
+
+    if (layer.layout && layer.layout["text-field"]) {
+
+      map.setPaintProperty(layer.id, "text-halo-color", "#ffffff");
+
+      map.setPaintProperty(layer.id, "text-halo-width", 1.5);
+
     }
 
-    /* 📄 PARSE CSV (AUTO , o ;) */
-    function parseCSV(text) {
-      const lines = text.trim().split('\n');
-      const separator = lines[0].includes(';') ? ';' : ',';
-      const headers = lines.shift().split(separator);
+  }
 
-      return lines.map(line => {
-        const values = line.split(separator);
-        const obj = {};
-        headers.forEach((h, i) => {
-          obj[h.trim()] = values[i]?.trim();
-        });
-        return obj;
-      });
-    }
+  if (layer.id.includes("road") && layer.type === "line") {
 
-    /* 🗺️ CREAR MAPA */
-    const map = new mapboxgl.Map({
-      container: 'map',
-      style: 'mapbox://styles/mapbox/light-v11',
-      center: [-70.64, -33.45],
-      zoom: 12
-    });
+    map.setPaintProperty(layer.id, "line-width", 1.4);
 
-    /* 📍 CARGAR DATOS DESDE GOOGLE SHEETS */
-    fetch(SHEET_URL)
-      .then(res => res.text())
-      .then(csv => {
-        const data = parseCSV(csv);
-        const bounds = new mapboxgl.LngLatBounds();
+  }
 
-        data.forEach(p => {
-          const percent = Number(p.percent);
-          const lat = Number(p.lat);
-          const lng = Number(p.lng);
+});
 
-          if (isNaN(percent) || isNaN(lat) || isNaN(lng)) return;
+});
 
-          const color = getGradientColor(percent);
+/* CARGAR DATOS DESDE GOOGLE SHEETS */
+fetch(SHEET_URL)
 
-          const el = document.createElement('div');
-          el.className = 'marker';
-          el.textContent = percent + '%';
+.then(res => res.text())
 
-          /* 🔥 APLICAR COLOR Y GLOW */
-          el.style.backgroundColor = color;
-          el.style.boxShadow = `
-            0 0 6px ${color},
-            0 0 12px ${color},
-            0 0 20px ${color}
-          `;
+.then(csv => {
 
-          new mapboxgl.Marker(el)
-            .setLngLat([lng, lat])
-            .setPopup(
-              new mapboxgl.Popup({ offset: 25 }).setHTML(
-                `<h3>${p.name}</h3><b>${percent}%</b>`
-              )
-            )
-            .addTo(map);
+const data = parseCSV(csv);
 
-          bounds.extend([lng, lat]);
-        });
+const bounds = new mapboxgl.LngLatBounds();
 
-        map.fitBounds(bounds, {
-          padding: 40,
-          maxZoom: 14
-        });
-      })
-      .catch(err => {
-        console.error('Error cargando CSV:', err);
-      });
-  </script>
+data.forEach(p => {
+
+  const percent = Number(p.percent);
+
+  const lat = Number(p.lat);
+
+  const lng = Number(p.lng);
+
+  if (isNaN(percent) || isNaN(lat) || isNaN(lng)) return;
+
+  const color = getGradientColor(percent);
+
+  const el = document.createElement('div');
+
+  el.className = 'marker';
+
+  el.textContent = percent + '%';
+
+  el.style.backgroundColor = color;
+
+  el.style.boxShadow = `
+    0 0 6px ${color},
+    0 0 12px ${color},
+    0 0 20px ${color}
+  `;
+
+  new mapboxgl.Marker(el)
+
+    .setLngLat([lng, lat])
+
+    .setPopup(
+
+      new mapboxgl.Popup({ offset: 25 }).setHTML(
+        `<h3>${p.name}</h3><b>${percent}%</b>`
+      )
+
+    )
+
+    .addTo(map);
+
+  bounds.extend([lng, lat]);
+
+});
+
+map.fitBounds(bounds, {
+
+  padding: 40,
+
+  maxZoom: 14
+
+});
+
+})
+
+.catch(err => {
+
+console.error('Error cargando CSV:', err);
+
+});
+
+</script>
+
 </body>
-
 </html>
-
